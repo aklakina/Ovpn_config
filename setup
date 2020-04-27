@@ -1,0 +1,92 @@
+#!/bin/bash
+
+
+home=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )
+
+echo "Please NOTE this setup has RSA based authentication by default. This means that root and any other user login will ONLY BE AVALIABLE by public-private key authentication. If you want to turn this feature off then write 'RSA-OFF' else be sure to change the authorized_keys file and put in your public key. This setup won't let you get further till you either use RSA-off or change the auth_keys file."
+z=0
+while [[ z -lt 1 ]]
+do
+	read a
+	echo " "
+	if [[ "$a" == "RSA-off" ]]; then
+		z=1
+		sed -i "s/PermitRootLogin without-password/PermitRootLogin yes/g" $home/sshd_config
+		sed -i "s/RSAAuthentication yes/RSAAuthentication no/g" $home/sshd_config
+		sed -i "s/PubkeyAuthentication yes/PubkeyAuthentication no/g" $home/sshd_config
+		sed -i "s/PasswordAuthentication no/PasswordAuthentication yes/g" $home/sshd_config
+		sed -i "s/'AuthorizedKeysFile	%h/.ssh/authorized_keys'/'#AuthorizedKeysFile	%h/.ssh/authorized_keys'/g" $home/sshd_config
+	else
+		if [[ "$a" == "" ]]; then
+			z=1
+			if [[ $(cat ./.ssh/authorized_keys) == "" ]] || ! [ -f ./.ssh/authorized_keys ]; then
+				exit
+			fi
+		fi
+	fi
+done
+echo "Please write here your static ip address. (it is safe and it will be only used for this setup process)"
+read b
+echo ""
+echo "Please write here your desired port to open on your server so you can ssh in to your server with the static ip."
+read k
+echo ""
+echo "Please write here your closed servers port TO which you will want to route the connection. (This is in the sshd_config file of your other server. By default this is 22. Press enter to use default port.)"
+read l
+if [[ $l == "" ]]; then
+	l=22
+fi
+echo ""
+echo "Please write here the port FROM which you want to route the connection to your closed server."
+read m
+echo ""
+echo "Now please write here the port at which you want your client to connect to your openvpn server"
+read n
+echo ""
+chmod -R a+rwx $(ls)
+sed -i "s/&a/$b/g" $home/iptables-rules
+sed -i "s/&b/$k/g" $home/iptables-rules
+sed -i "s/&c/$l/g" $home/iptables-rules
+sed -i "s/&d/$m/g" $home/iptables-rules
+sed -i "s/&e/$n/g" $home/iptables-rules
+iptables-reload < $home/iptables-rules
+sed -i "s/&b/$k/g" $home/sshd_config
+sed -i "s/&a/$b/g" $home/client-configs/base.conf
+sed -i "s/&e/$n/g" $home/client-configs/base.conf
+cp $home/sshd_config /etc/ssh/sshd_config
+chmod a+r /etc/ssh/sshd_config
+chmod u+w /etc/ssh/sshd_config
+apt-get -y update
+sudo apt-get install openvpn easy-rsa
+make-cadir ~/openvpn-ca
+cd ~/openvpn-ca
+source vars
+./clean-all
+echo "The next few lines are default values. You can set them something else if you want but for the reason of keeping this all simple you should just press enter till you arrive to a yes/no prompt. Please do not change the name of the server. This setup will use server as name so if you change this setting it won't work. (8 enter)"
+echo "Please confirm to move on."
+read alma
+./build-ca
+echo "You will be now prompted with the same questions again. Again press 8 enters or change what you have changed in the last one and then please press Y twice."
+./build-key-server server
+echo "The next operation could take a few minutes so keep calm this script is still doing it's job."
+./build-dh
+openvpn --genkey --secret keys/ta.key
+source vars
+./build-key client1
+cp -R $home/openvpn /etc/openvpn
+cp ca.crt server.crt server.key ta.key dh2048.pem /etc/openvpn
+gunzip -c /usr/share/doc/openvpn/examples/sample-config-files/server.conf.gz | sudo tee /etc/openvpn/server.conf
+sysctl -w net.ipv4.ip_forward=1
+sysctl -p /etc/sysctl.conf
+cp -R $home/.ssh /root/.ssh
+cp $home/openvpn@.service /lib/systemd/system/openvpn@.service
+systemctl daemon-reload
+systemctl start openvpn@server
+echo "Your server is now configured. This script is now going to configure the client files. If it is done then just download the client1.ovpn and configure your client using this file."
+mkdir -p ~/client-configs/files
+chmod 700 ~/client-configs/files
+cp $home/client-configs/base.conf ~/client-configs/base.conf
+cd ~/client-configs
+./make_config.sh client1
+mv ~/client-configs/files/client1.ovpn $home/client1.ovpn
+echo "The setup is now complete. Have a good day!"
