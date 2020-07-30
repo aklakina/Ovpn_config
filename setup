@@ -3,13 +3,13 @@
 
 home=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )
 
-echo "Please NOTE this setup has RSA based authentication by default. This means that root and any other user login will ONLY BE AVALIABLE by public-private key authentication. If you want to turn this feature off then write 'RSA-OFF' else be sure to change the authorized_keys file and put in your public key. This setup won't let you get further till you either use RSA-off or change the auth_keys file."
+echo "Please NOTE this setup has RSA based authentication by default. This means that root and any other user login will ONLY BE AVALIABLE by public-private key authentication. If you want to turn this feature off then write 'RSA-OFF' else be sure to change the authorized_keys file and put in your public key. This setup won't let you get further till you either use RSA-OFF or change the auth_keys file."
 z=0
 while [[ z -lt 1 ]]
 do
 	read a
 	echo " "
-	if [[ "$a" == "RSA-off" ]]; then
+	if [[ "$a" == "RSA-OFF" ]]; then
 		z=1
 		sed -i "s/PermitRootLogin without-password/PermitRootLogin yes/g" $home/sshd_config
 		sed -i "s/RSAAuthentication yes/RSAAuthentication no/g" $home/sshd_config
@@ -19,8 +19,9 @@ do
 	else
 		if [[ "$a" == "" ]]; then
 			z=1
-			if [[ $(cat ./.ssh/authorized_keys) == "" ]] || ! [ -f ./.ssh/authorized_keys ]; then
-				exit
+			if [[ $(cat %h/.ssh/authorized_keys) == "" ]] || ! [ -f %h/.ssh/authorized_keys ]; then
+				echo "Your auth file under %h/.ssh/authorized_keys either does not exist or is empty. Please change this before continue or turn off rsa auth with RSA-OFF!"
+				z=0
 			fi
 		fi
 	fi
